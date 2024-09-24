@@ -24,6 +24,7 @@
 
 
 void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, int numOfColX);
+void bfbcg_Opt(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, int numOfColX);
 double* fillUpVecForBFBCG(double* vecX_h, int numOfA, int numOfColX);
 
 
@@ -383,6 +384,17 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
     free(beta_h);
     
 } // end of bfbcg
+
+
+//Optimize vertions BFBCG
+void bfbcg_Opt(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, int numOfColX){
+    
+}
+
+
+
+
+
 
 double* fillUpVecForBFBCG(double* vecX_h, int numOfA, int numOfColX){
     srand(time(0));

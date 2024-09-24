@@ -23,10 +23,11 @@
 
 
 int main(){
-	const char*  mtxFile = "files/198147_by_198147_MatrixA_50.mm";
-	const char*  vecFile = "files/198147_by_1_Vector_b_50.mm";
+	const char*  mtxFile = "files/198147_by_198147_MatrixA_1000.mm";
+	const char*  vecFile = "files/198147_by_1_Vector_b_1000.mm";
     const int NUM_OF_CLM_VEC = 5;
 	int size;
+    bool optimize = false;
 	
     // (0) Extract CSRMatrix A, vector b
 	CSRMatrix* csrMtxA = importCSRMatrixFromMM(mtxFile);
@@ -50,9 +51,14 @@ int main(){
     CHECK(cudaMemcpy(mtxX_d, mtxX_h, NUM_OF_A * NUM_OF_CLM_VEC * sizeof(double), cudaMemcpyHostToDevice));
     CHECK(cudaMemcpy(mtxB_d, mtxB_h, NUM_OF_A * NUM_OF_CLM_VEC * sizeof(double), cudaMemcpyHostToDevice));
 
-
-    //(3) Call bfbcg to utilize CUDA functions
-    bfbcg(csrMtxA, mtxX_d, mtxB_d, NUM_OF_A, NUM_OF_CLM_VEC);
+    if(optimize){
+        std::cout << "\n~~Optimized bfbcg test~~\n\n";
+    }else{
+        //(3) Call bfbcg to utilize CUDA functions
+        std::cout << "\n~~Naive bfbcg test~~";
+        bfbcg(csrMtxA, mtxX_d, mtxB_d, NUM_OF_A, NUM_OF_CLM_VEC);
+    }
+    
 
   
     //(4) Free GPU and CPU memory
@@ -64,7 +70,7 @@ int main(){
     delete[] vecB_h;
     delete csrMtxA;
 
-
+    std::cout << "\n\n✅✅BFBCG test done successfully✅✅\n\n";
 	return 0;
 }
 
