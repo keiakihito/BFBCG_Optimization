@@ -12,19 +12,19 @@
 
 
 
-//Input: const CSRMatrix &csrMtx, double *dnsMtxB_d, int numClmB, double * dnxMtxC_d
+//Input: const CSRMatrix *csrMtx, double *dnsMtxB_d, int numClmB, double * dnxMtxC_d
 //Process: Matrix Multiplication Sparse matrix and Dense matrix
 //Output: dnsMtxC_d, dense matrix C in device
-void multiply_Sprc_Den_mtx(cusparseHandle_t cusparseHandler, const CSRMatrix &csrMtx, double *dnsMtxB_d, int numClmsB, double * dnsMtxC_d);
+void multiply_Sprc_Den_mtx(cusparseHandle_t cusparseHandler, const CSRMatrix *csrMtx, double *dnsMtxB_d, int numClmsB, double * dnsMtxC_d);
 
 
-// Input: const CSRMatrix &csrMtx, double *dnsVecX_d, double *dnsVecY_d
+// Input: const CSRMatrix *csrMtx, double *dnsVecX_d, double *dnsVecY_d
 // Process: Matrix Multiplication Sparse matrix and Dense vector
 // Output: dnsVecY_d, dense vector Y in device
-void multiply_Sprc_Den_vec(cusparseHandle_t cusparseHandler, const CSRMatrix &csrMtx, double *dnsVecX_d, double *dnsVecY_d);
+void multiply_Sprc_Den_vec(cusparseHandle_t cusparseHandler, const CSRMatrix *csrMtx, double *dnsVecX_d, double *dnsVecY_d);
 
 
-//Input: double *dnsMtxB_d, const CSRMatrix &csrMtx, double *dnsMtxX_d, int numClmB, double * dnxMtxC_d
+//Input: double *dnsMtxB_d, const CSRMatrix *csrMtx, double *dnsMtxX_d, int numClmB, double * dnxMtxC_d
 //Process: perform C = C - AX
 //Output: dnsMtxC_d, dense matrix C in device
 void den_mtx_subtract_multiply_Sprc_Den_mtx(cusparseHandle_t cusparseHandler,double *dnsMtxX_d, int numClmsB, double *dnsMtxC_d);
@@ -32,32 +32,32 @@ void den_mtx_subtract_multiply_Sprc_Den_mtx(cusparseHandle_t cusparseHandler,dou
 //Input:
 //Process: perform vector y = y  - Ax
 //Output: dnsVecY_d, dense vector C in device
-void den_vec_subtract_multiplly_Sprc_Den_vec(cusparseHandle_t cusparseHandler, const CSRMatrix &csrMtx, double *dnsVecX_d, double *dnsVecY_d);
+void den_vec_subtract_multiplly_Sprc_Den_vec(cusparseHandle_t cusparseHandler, const CSRMatrix *csrMtx, double *dnsVecX_d, double *dnsVecY_d);
 
 //Input
 //Process: perform r = b - Ax, dot product r' * r, then square norm
 //Output: double twoNorms residual
-double validateCG(const CSRMatrix &csrMtx, int numOfA, double *dnsVecX_d, double* dnsVecY_d);
+double validateCG(const CSRMatrix *csrMtx, int numOfA, double *dnsVecX_d, double* dnsVecY_d);
 
 
-//Input: CSRMatrix &csrMtx, int numOfA, double *dnsMtxX_d, int numClmsB, double *dnsMtxC_d
+//Input: CSRMatrix *csrMtx, int numOfA, double *dnsMtxX_d, int numClmsB, double *dnsMtxC_d
 //Process: perform R = B - AX, then calculate the first column vector 2 norms
 //Output: double twoNorms
-double validateBFBCG(const CSRMatrix &csrMtx, int numOfA, double *dnsMtxX_d, int numClmsB, double *dnsMtxC_d);
+double validateBFBCG(const CSRMatrix *csrMtx, int numOfA, double *dnsMtxX_d, int numClmsB, double *dnsMtxC_d);
 
 
 
 
 
 //Sparse matrix multiplicatation
-//Input: const CSRMatrix &csrMtx, double *dnsMtxB_d, int numClmB, double * dnxMtxC_d
+//Input: const CSRMatrix *csrMtx, double *dnsMtxB_d, int numClmB, double * dnxMtxC_d
 //Process: Matrix Multiplication Sparse matrix and Dense matrix
 //Output: dnsMtxC_d, dense matrix C in device
-void multiply_Sprc_Den_mtx(cusparseHandle_t cusparseHandler, const CSRMatrix &csrMtx, double *dnsMtxB_d, int numClmsB, double * dnsMtxC_d)
+void multiply_Sprc_Den_mtx(cusparseHandle_t cusparseHandler, const CSRMatrix *csrMtx, double *dnsMtxB_d, int numClmsB, double * dnsMtxC_d)
 {
-	int numRowsA = csrMtx.numOfRows;
-	int numClmsA = csrMtx.numOfClms;
-	int nnz = csrMtx.numOfnz;
+	int numRowsA = csrMtx->_numOfRows;
+	int numClmsA = csrMtx->_numOfClms;
+	int nnz = csrMtx->_numOfnz;
 
 	double alpha = 1.0f;
 	double beta = 0.0f;
@@ -75,9 +75,9 @@ void multiply_Sprc_Den_mtx(cusparseHandle_t cusparseHandler, const CSRMatrix &cs
 	CHECK(cudaMalloc((void**)&vals_d, nnz * sizeof(double)));
 
 	//(2) Copy values from host to device
-	CHECK(cudaMemcpy(row_offsets_d, csrMtx.row_offsets, (numRowsA+1) * sizeof(int), cudaMemcpyHostToDevice));
-	CHECK(cudaMemcpy(col_indices_d, csrMtx.col_indices, nnz * sizeof(int), cudaMemcpyHostToDevice));
-	CHECK(cudaMemcpy(vals_d, csrMtx.vals, nnz * sizeof(double), cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(row_offsets_d, csrMtx->_row_offsets, (numRowsA+1) * sizeof(int), cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(col_indices_d, csrMtx->_col_indices, nnz * sizeof(int), cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(vals_d, csrMtx->_vals, nnz * sizeof(double), cudaMemcpyHostToDevice));
 
 	//(3) Crate cuSPARSE handle and descriptors
 	// cusparseHandle_t cusparseHandler;
@@ -120,14 +120,14 @@ void multiply_Sprc_Den_mtx(cusparseHandle_t cusparseHandler, const CSRMatrix &cs
 
 
 // Sparse matrix multiplication with a dense vector
-// Input: const CSRMatrix &csrMtx, double *dnsVecX_d, double *dnsVecY_d
+// Input: const CSRMatrix *csrMtx, double *dnsVecX_d, double *dnsVecY_d
 // Process: Matrix Multiplication Sparse matrix and Dense vector
 // Output: dnsVecY_d, dense vector Y in device
-void multiply_Sprc_Den_vec(cusparseHandle_t cusparseHandler, const CSRMatrix &csrMtx, double *dnsVecX_d, double *dnsVecY_d)
+void multiply_Sprc_Den_vec(cusparseHandle_t cusparseHandler, const CSRMatrix *csrMtx, double *dnsVecX_d, double *dnsVecY_d)
 {
-	int numRowsA = csrMtx.numOfRows;
-	int numColsA = csrMtx.numOfClms;
-	int nnz = csrMtx.numOfnz;
+	int numRowsA = csrMtx->_numOfRows;
+	int numColsA = csrMtx->_numOfClms;
+	int nnz = csrMtx->_numOfnz;
 
 	double alpha = 1.0f;
 	double beta = 0.0f;
@@ -144,9 +144,9 @@ void multiply_Sprc_Den_vec(cusparseHandle_t cusparseHandler, const CSRMatrix &cs
 	CHECK(cudaMalloc((void**)&vals_d, nnz * sizeof(double)));
 
 	//(2) Copy values from host to device
-	CHECK(cudaMemcpy(row_offsets_d, csrMtx.row_offsets, (numRowsA+1) * sizeof(int), cudaMemcpyHostToDevice));
-	CHECK(cudaMemcpy(col_indices_d, csrMtx.col_indices, nnz * sizeof(int), cudaMemcpyHostToDevice));
-	CHECK(cudaMemcpy(vals_d, csrMtx.vals, nnz * sizeof(double), cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(row_offsets_d, csrMtx->_row_offsets, (numRowsA+1) * sizeof(int), cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(col_indices_d, csrMtx->_col_indices, nnz * sizeof(int), cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(vals_d, csrMtx->_vals, nnz * sizeof(double), cudaMemcpyHostToDevice));
 
 	//(3)Create cuSPARSE handle and descriptors
 	// cusparseHandle_t cusparseHandler;
@@ -188,13 +188,13 @@ void multiply_Sprc_Den_vec(cusparseHandle_t cusparseHandler, const CSRMatrix &cs
 } // end of multiply_Sprc_Den_vec
 
 
-//Input: double *dnsMtxB_d, const CSRMatrix &csrMtx, double *dnsMtxX_d, int numClmB, double * dnxMtxC_d
+//Input: double *dnsMtxB_d, const CSRMatrix *csrMtx, double *dnsMtxX_d, int numClmB, double * dnxMtxC_d
 //Process: perform C = C - AX
 //Output: dnsMtxC_d, dense matrix C in device
-void den_mtx_subtract_multiply_Sprc_Den_mtx(cusparseHandle_t cusparseHandler, const CSRMatrix &csrMtx, double *dnsMtxX_d, int numClmsB, double *dnsMtxC_d) {
-	int numRowsA = csrMtx.numOfRows;
-	int numClmsA = csrMtx.numOfClms;
-	int nnz = csrMtx.numOfnz;
+void den_mtx_subtract_multiply_Sprc_Den_mtx(cusparseHandle_t cusparseHandler, const CSRMatrix *csrMtx, double *dnsMtxX_d, int numClmsB, double *dnsMtxC_d) {
+	int numRowsA = csrMtx->_numOfRows;
+	int numClmsA = csrMtx->_numOfClms;
+	int nnz = csrMtx->_numOfnz;
 
 	double alpha = -1.0f;
 	double beta = 1.0f;
@@ -212,9 +212,9 @@ void den_mtx_subtract_multiply_Sprc_Den_mtx(cusparseHandle_t cusparseHandler, co
 	CHECK(cudaMalloc((void**)&vals_d, nnz * sizeof(double)));
 
 	//(2) Copy values from host to device
-	CHECK(cudaMemcpy(row_offsets_d, csrMtx.row_offsets, (numRowsA+1) * sizeof(int), cudaMemcpyHostToDevice));
-	CHECK(cudaMemcpy(col_indices_d, csrMtx.col_indices, nnz * sizeof(int), cudaMemcpyHostToDevice));
-	CHECK(cudaMemcpy(vals_d, csrMtx.vals, nnz * sizeof(double), cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(row_offsets_d, csrMtx->_row_offsets, (numRowsA+1) * sizeof(int), cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(col_indices_d, csrMtx->_col_indices, nnz * sizeof(int), cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(vals_d, csrMtx->_vals, nnz * sizeof(double), cudaMemcpyHostToDevice));
 
 	//(3) Crate cuSPARSE handle and descriptors
 	// cusparseHandle_t cusparseHandler;
@@ -258,10 +258,10 @@ void den_mtx_subtract_multiply_Sprc_Den_mtx(cusparseHandle_t cusparseHandler, co
 //Input:
 //Process: perform vector y = y  - Ax
 //Output: dnsVecY_d, dense vector C in device
-void den_vec_subtract_multiplly_Sprc_Den_vec(cusparseHandle_t cusparseHandler, const CSRMatrix &csrMtx, double *dnsVecX_d, double *dnsVecY_d){
-	int numRowsA = csrMtx.numOfRows;
-	int numColsA = csrMtx.numOfClms;
-	int nnz = csrMtx.numOfnz;
+void den_vec_subtract_multiplly_Sprc_Den_vec(cusparseHandle_t cusparseHandler, const CSRMatrix *csrMtx, double *dnsVecX_d, double *dnsVecY_d){
+	int numRowsA = csrMtx->_numOfRows;
+	int numColsA = csrMtx->_numOfClms;
+	int nnz = csrMtx->_numOfnz;
 
 	double alpha = -1.0f;
 	double beta = 1.0f;
@@ -278,9 +278,9 @@ void den_vec_subtract_multiplly_Sprc_Den_vec(cusparseHandle_t cusparseHandler, c
 	CHECK(cudaMalloc((void**)&vals_d, nnz * sizeof(double)));
 
 	//(2) copy values from host to devise
-	CHECK(cudaMemcpy(row_offsets_d, csrMtx.row_offsets, (numRowsA + 1) * sizeof(int), cudaMemcpyHostToDevice));
-	CHECK(cudaMemcpy(col_indices_d, csrMtx.col_indices, nnz * sizeof(int), cudaMemcpyHostToDevice));
-	CHECK(cudaMemcpy(vals_d, csrMtx.vals, nnz * sizeof(double), cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(row_offsets_d, csrMtx->_row_offsets, (numRowsA + 1) * sizeof(int), cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(col_indices_d, csrMtx->_col_indices, nnz * sizeof(int), cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(vals_d, csrMtx->_vals, nnz * sizeof(double), cudaMemcpyHostToDevice));
 
 	//(3) Create cuSPARSE handle and descriptors
 	// cusparseHandle_t cusparseHandler;
@@ -323,7 +323,7 @@ void den_vec_subtract_multiplly_Sprc_Den_vec(cusparseHandle_t cusparseHandler, c
 } // end of den_mtx_subtract_multiplly_Sprc_Den_vec
 
 
-double validateCG(const CSRMatrix &csrMtx, int numOfA, double *dnsVecX_d, double* dnsVecY_d)
+double validateCG(const CSRMatrix *csrMtx, int numOfA, double *dnsVecX_d, double* dnsVecY_d)
 {
 	double residual = 0.0f;
 
@@ -341,10 +341,10 @@ double validateCG(const CSRMatrix &csrMtx, int numOfA, double *dnsVecX_d, double
 
 }
 
-//Input: CSRMatrix &csrMtx, int numOfA, double *dnsMtxX_d, int numClmsB, double *dnsMtxC_d
+//Input: CSRMatrix *csrMtx, int numOfA, double *dnsMtxX_d, int numClmsB, double *dnsMtxC_d
 //Process: perform R = B - AX, then calculate the first column vector 2 norms
 //Output: double twoNorms
-double validateBFBCG(const CSRMatrix &csrMtx, int numOfA, double *dnsMtxX_d, int numClmsB, double *dnsMtxC_d)
+double validateBFBCG(const CSRMatrix *csrMtx, int numOfA, double *dnsMtxX_d, int numClmsB, double *dnsMtxC_d)
 {
 	bool debug = false;
 	

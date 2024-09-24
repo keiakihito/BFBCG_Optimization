@@ -27,39 +27,45 @@
 
 //Process: Cojugate Gradient to solve LargeVector<glm::mat3> vecX
 //Output: LargetVector<glm::mat3> vecX
-void pcg(LargeVector<glm::mat3> &mtxA_h, LargeVector<glm::mat3> &vecX_h, LargeVector<glm::mat3> &vecB_h);
+void solveCG_GPU(LargeVector<glm::mat3> &mtxA_h, LargeVector<glm::mat3> &vecX_h, LargeVector<glm::mat3> &vecB_h);
 
 //Input:
 //Process: Conjugate Gradient with cuda GPU
 //Output: vecSolX
-void pcg_GPU(struct CSRMatrix *csrMtxA, double *vecSolX_h, double *vecB_h, int numOfA);
+void pcg(struct CSRMatrix *csrMtxA, double *vecSolX_h, double *vecB_h, int numOfA);
 
 
 
-void pcg(LargeVector<glm::mat3> &mtxA_h, LargeVector<glm::vec3> &vecX_h, LargeVector<glm::vec3> &vecB_h){
+void solveCG_GPU(LargeVector<glm::mat3> &mtxA_h, LargeVector<glm::vec3> &largeVecV, LargeVector<glm::vec3> &largeVecB){
     //(0) Convert LargeVector<glm::mat3> to CSRMatrix object
-    struct CSRMatrix csrMtxA = convertLargeVectorToCSRMtx(mtxA_h);
+    struct CSRMatrix* csrMtxA = convertLargeVectorToCSRMtx(mtxA_h);
+    double* vecX_h = convertLargeVecToDoublePtr(largeVecV);
+    double* vecB_h = convertLargeVecToDoublePtr(largeVecB);
 
     //(1) Allocate memoery
     double* vecX_d = nullptr;
     double* vecB_d = nullptr;
 
-    CHECK(cudaMalloc((void**)&vecX_d, vecX_h.size() * sizeof(double) * 3));
-    CHECK(cudaMalloc((void**)&vecB_d, vecB_h.size() * sizeof(double) * 3));
+    CHECK(cudaMalloc((void**)&vecX_d, largeVecV.size() * sizeof(double) * 3));
+    CHECK(cudaMalloc((void**)&vecB_d, largeVecB.size() * sizeof(double) * 3));
 
     //(2) Copy Data from CPU to GPU
-    CHECK(cudaMemcpy(vecX_d, &vecX_h[0], vecX_h.size() * sizeof(glm::vec3), cudaMemcpyHostToDevice));
-    CHECK(cudaMemcpy(vecB_d, &vecB_h[0], vecB_h.size() * sizeof(glm::vec3), cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpy(vecX_d, vecX_h, largeVecV.size() * sizeof(double) * 3, cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpy(vecB_d, vecB_h, largeVecB.size() * sizeof(double) * 3, cudaMemcpyHostToDevice));
 
-    //(3) Call psg_GPU to utilize cuda functions
-    pcg_GPU(&csrMtxA, vecX_d, vecB_d, mtxA_h.size());
+    //(3) Call pcg to utilize cuda functions
+    pcg(csrMtxA, vecX_d, vecB_d, mtxA_h.size()*3);
 
-    //(4) Copy solution vector x to Host with overwriting
-    CHECK(cudaMemcpy(&vecX_h[0], vecX_d, vecX_h.size() * sizeof(glm::vec3), cudaMemcpyDeviceToHost));
+    //(4) Copy solution vector x to <glm::vec3> &largeVecV with overwriting
+    CHECK(cudaMemcpy(vecX_h, vecX_d, largeVecV.size() * sizeof(double) * 3, cudaMemcpyDeviceToHost));
+    largeVecV = convertDoublePtrToLargeVec(vecX_h, largeVecV.size()*3);
 
     //(5) Free GPU memory
     CHECK(cudaFree(vecX_d));
     CHECK(cudaFree(vecB_d));
+    delete[] vecX_h;
+    delete[] vecB_h;
+    delete csrMtxA;
 } // end of pcg
 
 
@@ -67,15 +73,16 @@ void pcg(LargeVector<glm::mat3> &mtxA_h, LargeVector<glm::vec3> &vecX_h, LargeVe
 
 
 
-void pcg_GPU(struct CSRMatrix *csrMtxA, double *vecSolX_d, double *vecB_d, int numOfA)
+void pcg(struct CSRMatrix *csrMtxA, double *vecSolX_d, double *vecB_d, int numOfA)
 {
     double startTime, endTime;
     bool debug = false;
-    const double THRESHOLD = 1e-6;
+    bool benchMark = true; // Check benchmark for the first iteration each operation
+    const double THRESHOLD = 1e-8;
 
     double *r_d = NULL; // Residual
     double *s_d = NULL; // For s <- M * r and delta <- r' * s
-    struct CSRMatrix csrMtxM = generateSparseIdentityMatrixCSR(numOfA); // Precondtion
+    struct CSRMatrix *csrMtxM = generateSparseIdentityMatrixCSR(numOfA); // Precondtion
     double *dirc_d = NULL; // Direction
     double *q_d = NULL; // Vector Ad
     double dot = 0.0f; // temporary val for d^{T} *q to get aplha
@@ -121,7 +128,7 @@ void pcg_GPU(struct CSRMatrix *csrMtxA, double *vecSolX_d, double *vecB_d, int n
 
 
     //r = b - Ax
-    den_vec_subtract_multiplly_Sprc_Den_vec(cusparseHandler, *csrMtxA, vecSolX_d, r_d);
+    den_vec_subtract_multiplly_Sprc_Den_vec(cusparseHandler, csrMtxA, vecSolX_d, r_d);
     if(debug){
         printf("\n\nr_{0} = \n");
         print_vector(r_d, numOfA);
@@ -150,18 +157,21 @@ void pcg_GPU(struct CSRMatrix *csrMtxA, double *vecSolX_d, double *vecB_d, int n
 
 
     int counter = 1; // counter
-    const int MAX_ITR = 100;
+    const int MAX_ITR = 10000;
 
     while(counter <= MAX_ITR){
 
-        printf("\n\n💫💫💫= = = Iteraion %d= = = 💫💫💫\n", counter);
+      	if((benchMark && 0 <= counter && counter <= 6) || debug){
+        	printf("\n\n💫💫💫= = = Iteraion %d= = = 💫💫💫\n", counter);
+      	}
+
 
 
         //q <- Ad
         startTime = myCPUTimer();
-        multiply_Sprc_Den_vec(cusparseHandler, *csrMtxA, dirc_d, q_d);
+        multiply_Sprc_Den_vec(cusparseHandler, csrMtxA, dirc_d, q_d);
         endTime = myCPUTimer();
-        if(counter == 1){
+        if(benchMark && 0 <= counter && counter <= 6){
             printf("\nq <- Ad: %f s \n", endTime - startTime);
         }
 
@@ -183,7 +193,7 @@ void pcg_GPU(struct CSRMatrix *csrMtxA, double *vecSolX_d, double *vecB_d, int n
         //alpha(a) <- delta_{new} / dot // dot <- d^{T} * q
         alph = delta_new / dot;
         endTime = myCPUTimer();
-        if(counter == 1){
+        if(benchMark && 0 <= counter && counter <= 6){
             printf("\nalpha <- delta_{new} / d^{T} * q: %f s \n", endTime - startTime);
         }
 
@@ -196,7 +206,7 @@ void pcg_GPU(struct CSRMatrix *csrMtxA, double *vecSolX_d, double *vecB_d, int n
         startTime = myCPUTimer();
         CHECK_CUBLAS(cublasDaxpy(cublasHandler, numOfA, &alph, dirc_d, 1, vecSolX_d, 1));
         endTime = myCPUTimer();
-        if(counter == 1){
+        if(benchMark && 0 <= counter && counter <= 6){
             printf("\nx_{i+1} <- x_{i} + alpha * d_{i}: %f s \n", endTime - startTime);
         }
 
@@ -209,7 +219,7 @@ void pcg_GPU(struct CSRMatrix *csrMtxA, double *vecSolX_d, double *vecB_d, int n
         if(counter % 50 == 0){
             //r <- b -Ax Recompute
             CHECK(cudaMemcpy(r_d, vecB_d, sizeof(double) * numOfA, cudaMemcpyHostToDevice));
-            den_vec_subtract_multiplly_Sprc_Den_vec(cusparseHandler, *csrMtxA, vecSolX_d, r_d);
+            den_vec_subtract_multiplly_Sprc_Den_vec(cusparseHandler, csrMtxA, vecSolX_d, r_d);
             if(debug){
                 printf("\n\nr_{0} = \n");
                 print_vector(r_d, numOfA);
@@ -220,7 +230,7 @@ void pcg_GPU(struct CSRMatrix *csrMtxA, double *vecSolX_d, double *vecB_d, int n
             ngtAlph = -alph;
             CHECK_CUBLAS(cublasDaxpy(cublasHandler, numOfA, &ngtAlph, q_d, 1, r_d, 1));
             endTime = myCPUTimer();
-            if(counter == 1){
+            if(benchMark && 0 <= counter && counter <= 6){
                 printf("\nr_{i+1} <- r_{i} - alpha * q: %f s \n", endTime - startTime);
             }
 
@@ -235,7 +245,7 @@ void pcg_GPU(struct CSRMatrix *csrMtxA, double *vecSolX_d, double *vecB_d, int n
         startTime = myCPUTimer();
         multiply_Sprc_Den_vec(cusparseHandler, csrMtxM, r_d, s_d);
         endTime = myCPUTimer();
-        if(counter == 1){
+        if(benchMark && 0 <= counter && counter <= 6){
                 printf("\ns <- M * r: %f s \n", endTime - startTime);
             }
 
@@ -248,7 +258,7 @@ void pcg_GPU(struct CSRMatrix *csrMtxA, double *vecSolX_d, double *vecB_d, int n
         CHECK_CUBLAS(cublasDdot(cublasHandler, numOfA, r_d, 1, s_d, 1, &delta_new));
         bta = delta_new / delta_old;
         endTime = myCPUTimer();
-        if(counter == 1){
+        if(benchMark && 0 <= counter && counter <= 6){
             printf("\nbeta <- r' * s / delta_old: %f s \n", endTime - startTime);
         }
         if(debug){
@@ -258,10 +268,14 @@ void pcg_GPU(struct CSRMatrix *csrMtxA, double *vecSolX_d, double *vecB_d, int n
 
 
         relative_residual = sqrt(delta_new)/sqrt(initial_delta);
-        printf("\n\n🫥Relative residual = %f🫥\n", relative_residual);
+        if(debug){
+        	printf("\n\n🫥Relative residual = %f🫥\n", relative_residual);
+        }
+
 
         if(sqrt(delta_new) < THRESHOLD){
-//            printf("\n\n🌀🌀🌀CONVERGED🌀🌀🌀\n\n");
+        //    printf("\n\n🌀🌀🌀CONVERGED🌀🌀🌀\n\n");
+            printf("\n\n🫥Relative residual = %f🫥\n", relative_residual);
             break;
         }
 
@@ -271,7 +285,7 @@ void pcg_GPU(struct CSRMatrix *csrMtxA, double *vecSolX_d, double *vecB_d, int n
         CHECK_CUBLAS(cublasDscal(cublasHandler, numOfA, &bta, dirc_d, 1)); //d <- ßd
         CHECK_CUBLAS(cublasDaxpy(cublasHandler, numOfA, &alpha, s_d, 1, dirc_d, 1)); // d <- s + d
         endTime = myCPUTimer();
-        if(counter == 1){
+        if(benchMark && (0 <= counter && counter <= 6)){
             printf("\nd_{i+1} <- s + d_{i} * beta: %f s \n", endTime - startTime);
         }
         if(debug){
@@ -282,7 +296,9 @@ void pcg_GPU(struct CSRMatrix *csrMtxA, double *vecSolX_d, double *vecB_d, int n
         counter++;
     } // end of while
 
-
+	if(counter == MAX_ITR){
+      printf("\n\n!!!CG_GPU not converted and reached %d iterations!!!\n\n", MAX_ITR);
+	}
 
 
     //(6) Free the GPU memory after use
@@ -291,7 +307,8 @@ void pcg_GPU(struct CSRMatrix *csrMtxA, double *vecSolX_d, double *vecB_d, int n
     CHECK(cudaFree(r_d));
     CHECK(cudaFree(s_d));
     CHECK(cudaFree(dirc_d));
-    CHECK(cudaFree(q_d););
+    CHECK(cudaFree(q_d);)
+    free(csrMtxM);
 
 }// end of pcg
 
