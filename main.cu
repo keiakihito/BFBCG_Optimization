@@ -23,8 +23,17 @@
 
 
 int main(){
+    //Warm up the GPU explicitly.
+    warmUpGPU();
+
+    //Base size
 	const char*  mtxFile = "files/198147_by_198147_MatrixA_1000.mm";
 	const char*  vecFile = "files/198147_by_1_Vector_b_1000.mm";
+    
+    //Bigger size
+    // const char*  mtxFile = "files/3151875_by_3151875MatrixA.mm";
+	// const char*  vecFile = "files/3151875_by_1_Vector_b.mm";
+    
     const int NUM_OF_CLM_VEC = 5;
 	int size;
     bool optimize = false;

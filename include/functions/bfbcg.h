@@ -164,31 +164,47 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
             print_mtx_clm_d(mtxQ_d, numOfA, crrntRank);
         }
 
-        //(P'Q)^{-1}, save for the beta calculation
+        
+        //Starting calculate Alpha <- (P'Q)^{-1} * (P'R) with inverse
+        //Part (a) (P'Q)
         startTime = myCPUTimer();
         multiply_Den_ClmM_mtxT_mtx(cublasHandler, mtxP_d, mtxQ_d, mtxPTQ_d, numOfA, crrntRank, crrntRank);
+        endTime = myCPUTimer();
+        if(benchmark && (1 <= counter && counter <= 6)){
+            printf("\nPart(a): (P'Q) %f s \n", endTime - startTime);
+        }
+        
         if(debug){
             printf("\n\n~~mtxPTQ~~\n\n");
             print_mtx_clm_d(mtxPTQ_d, crrntRank, crrntRank);
         }
 
-        //Check matrix is invertible or not.
-        const double CONDITION_NUM_THRESHOLD = 1000;
-        double conditionNum = computeConditionNumber(mtxPTQ_d, crrntRank, crrntRank);
-        assert (conditionNum < CONDITION_NUM_THRESHOLD && "\n\n!!ill-conditioned matrix A in inverse function!!\n\n");
-        
         //LU factorization inverse
         // inverse_Den_Mtx(cusolverHandler, mtxPTQ_d, mtxPTQ_inv_d, crrntRank);
         
+        
+        //Part (b) (P'Q)^{-1}
         //QR decompostion inverse
+        //(P'Q)^{-1}, save for the beta calculation
+        startTime = myCPUTimer();
         inverse_QR_Den_Mtx(cusolverHandler, cublasHandler, mtxPTQ_d, mtxPTQ_inv_d, crrntRank);
+        endTime = myCPUTimer();
+        if(benchmark && (1 <= counter && counter <= 6)){
+            printf("\nPart(b): (P'Q)^{-1} %f s \n", endTime - startTime);
+        }
+        
         if(debug){
             printf("\n\n~~mtxPTQ_inv~~\n\n");
             print_mtx_clm_d(mtxPTQ_inv_d, crrntRank, crrntRank);
         }
 
-        //(P'R)
+        //Part (C) (P'R)
+        startTime = myCPUTimer();
         multiply_Den_ClmM_mtxT_mtx(cublasHandler, mtxP_d, mtxR_d, mtxPTR_d, numOfA, crrntRank, numOfColX);
+        endTime = myCPUTimer();
+        if(benchmark && (1 <= counter && counter <= 6)){
+            printf("\nPart(C): (P'R) %f s \n", endTime - startTime);
+        }
         if(debug){
             printf("\n\n~~mtxPTR~~\n\n");
             print_mtx_clm_d(mtxPTR_d, crrntRank, numOfColX);
@@ -196,6 +212,7 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
 
 
         //Alpha <- (P'Q)^{-1} * (P'R)
+        //Part (d)
         if(benchmark && crrntRank == 1){
             // Copy data to mtxAlpha to overwrite as an answer
             // CHECK(cudaMalloc((void**)&mtxAlph_d, numOfColX * sizeof(double)));
@@ -204,11 +221,11 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
             if(debug){
                 printf("\n\n = = mtxPTQ_inv_d: %f = = \n", *alpha_h);
             }
-            
+            startTime = myCPUTimer();
             CHECK_CUBLAS(cublasDscal(cublasHandler, numOfColX, alpha_h, mtxAlph_d, crrntRank));
             endTime = myCPUTimer();
             if(benchmark && (1 <= counter && counter <= 6)){
-                printf("\nAlpha <- (P'Q)^{-1} * (P'R): %f s \n", endTime - startTime);
+                printf("\nPart(d): Alpha <- (P'Q)^{-1} * (P'R): %f s \n", endTime - startTime);
             }
             if(debug){
                 printf("\n\n~~mtxAlph_d~~\n\n");
@@ -216,10 +233,11 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
             }
 
         }else{
+            startTime = myCPUTimer();
             multiply_Den_ClmM_mtx_mtx(cublasHandler, mtxPTQ_inv_d, mtxPTR_d, mtxAlph_d, crrntRank, numOfColX, crrntRank);
             endTime = myCPUTimer();
             if(benchmark && (1 <= counter && counter <= 6)){
-                printf("\nAlpha <- (P'Q)^{-1} * (P'R): %f s \n", endTime - startTime);
+                printf("\nPart(d): Alpha <- (P'Q)^{-1} * (P'R): %f s \n", endTime - startTime);
             }
             if(debug){
                 printf("\n\n~~mtxAlpha~~\n\n");
@@ -333,17 +351,24 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
         //Then P_{i+1} <- orth(Z_{ i+1})
         startTime = myCPUTimer();
         multiply_sum_Den_ClmM_mtx_mtx(cublasHandler, mtxP_d, mtxBta_d, mtxZ_d, numOfA, numOfColX, crrntRank);
+        
+        endTime = myCPUTimer();
+        if(benchmark && (1 <= counter && counter <= 6)){
+            printf("\n(*) <- Z_{i+1} + p * beta: %f s \n", endTime - startTime);
+        }
         if(debug){
             printf("\n\n~~ (mtxZ_{i+1}_d + p * beta) ~~\n\n");
             print_mtx_clm_d(mtxZ_d, numOfA, numOfColX);
         }
 
+
         //To update matrix P
+        startTime = myCPUTimer();
         orth_SVD(&mtxP_d, mtxZ_d, numOfA, numOfColX, crrntRank);
 //        orth_QR(&mtxP_d, mtxZ_d, numOfA, crrntRank, crrntRank);
         endTime = myCPUTimer();
         if(benchmark && (1 <= counter && counter <= 6)){
-            printf("\nP_{i+1} = orth(Z_{i+1} + p * beta): %f s \n", endTime - startTime);
+            printf("\nP_{i+1} = orth(*): %f s \n", endTime - startTime);
         }
         if(debug){
             printf("\n\n~~ mtxP_d <- orth(*)~~\n\n");
@@ -357,6 +382,8 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
             printf("\n🫥Relative Residue: %f🫥\n\n", rltvRsdl_h);
             break;
         }
+        
+        printf("\n\n= = current Rank: %d = = \n\n", crrntRank);
 
         counter++;
     } // end of while

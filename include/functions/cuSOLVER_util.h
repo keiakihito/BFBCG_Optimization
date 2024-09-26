@@ -52,15 +52,14 @@ double* extractSngVals(cusolverDnHandle_t cusolverHandler, int numOfRow, int num
 
 
 //Inverse with QR decompostion
+//mtxA should be P'Q
 void inverse_QR_Den_Mtx(cusolverDnHandle_t cusolverHandler, cublasHandle_t cublasHandler,  double* mtxA_d, double* mtxA_inv_d, int N)
 {	
-	//Check matrix is invertible or not.
-	const double CONDITION_NUM_THRESHOLD = 1000;
-	double conditionNum = computeConditionNumber(mtxA_d, N, N);
-	assert (conditionNum < CONDITION_NUM_THRESHOLD && "\n\n!!ill-conditioned matrix A in inverse function!!\n\n");
-	
-	bool debug = false;
 
+	bool debug = false;
+	bool benchmark = true;
+
+	double startTime, endTime; // For bench mark
 	double *mtxA_cpy_d = NULL;
 	double *tau_d = NULL;
 	const int lda = N; //Leading dimention of A
@@ -80,7 +79,7 @@ void inverse_QR_Den_Mtx(cusolverDnHandle_t cusolverHandler, cublasHandle_t cubla
 	CHECK(cudaMalloc((void**)&tau_d, N * sizeof(double)));
 	CHECK(cudaMalloc((void**)&devInfo, N * sizeof(int)));
 	
-	//(2) Make copy of mtxA
+	//(2) Make copy of mtxA (P'Q)
 	CHECK(cudaMemcpy(mtxA_cpy_d, mtxA_d, N * N * sizeof(double), cudaMemcpyDeviceToDevice));
 
 	if(debug){
@@ -88,8 +87,19 @@ void inverse_QR_Den_Mtx(cusolverDnHandle_t cusolverHandler, cublasHandle_t cubla
         print_mtx_clm_d(mtxA_d, N, N);
     }
 	
+	//Let matrix (P'Q) = A = (QR) with decompostion 
+	// To find (P'Q)^{-1}, we will do A^{-1} = R^{-1}Q^{-1}= R^{-1}Q^{-1} = R^{-1}Q'
+	// The goal is obtaining R^{-1}Q', we will do RX = Q' in Part(6.iii)
+
 	//(3) Create Identity matrix
+	//Part(b.i) Create Identity matrix
+	startTime = myCPUTimer();
 	createIdentityMtx(mtxA_inv_d, N);
+	endTime = myCPUTimer();
+	if(benchmark){
+		printf("\n\n~~ inside (P'Q)^{-1} ~~\n");
+		printf("\nPart(b.i): Create Identity Matrix %f s \n", endTime - startTime);
+	}
 	if(debug){
 		printf("\n\n~~mtxA_inv_d (mtxI)~~\n\n");
 		print_mtx_clm_d(mtxA_inv_d, N, N);
@@ -99,27 +109,42 @@ void inverse_QR_Den_Mtx(cusolverDnHandle_t cusolverHandler, cublasHandle_t cubla
 	CHECK_CUSOLVER(cusolverDnDgeqrf_bufferSize(cusolverHandler, N, N, mtxA_cpy_d, N, &lwork));
 	CHECK(cudaMalloc((void**)&work_d, lwork * sizeof(double)));
 	
-	//(5)Perform QR decomposition
+	//(5)Perform QR decomposition, the matrix Q is stored to mtxA_cpy_d implicitly
+	startTime = myCPUTimer();
 	CHECK_CUSOLVER(cusolverDnDgeqrf(cusolverHandler, N, N, mtxA_cpy_d, lda, tau_d, work_d, lwork, devInfo));
-
+	endTime = myCPUTimer();
+	if(benchmark){
+		printf("\nPart(b.ii): Perform QR decompostion %f s \n", endTime - startTime);
+	}
 	if(debug){
         printf("\n\nAfter QR factorization\n");
         printf("\n\n~~mtxA_cpy_d~~\n");
         print_mtx_clm_d(mtxA_cpy_d, N, N);
     }
 
-	//(6) Solve system
+	//(6) Solve system for R * X = Q' * I
+	// Part(6.i) obtains Q'
 	//Let (QR) * X = I, recall Q * Q^{-1} = Q * Q' = I where Q' is stored to mtxA_inv_d
 	//cusolverDnDormqr obtains Q' performing R * X = Q' * I where R is upper triangular matrix
+	startTime = myCPUTimer();
 	CHECK_CUSOLVER(cusolverDnDormqr(cusolverHandler, CUBLAS_SIDE_LEFT, CUBLAS_OP_T, N, N, N, mtxA_cpy_d, lda, tau_d, mtxA_inv_d, lda, work_d, lwork, devInfo));
 	CHECK(cudaDeviceSynchronize());
+	endTime = myCPUTimer();
+	if(benchmark){
+		printf("\nPart(b.iii): Obtainig Q' implicitly %f s \n", endTime - startTime);
+	}
 
-	//Solve RX = Q'
+	//Part(6.ii) Solve RX = Q', after this mtxA_inv_d holds R^{-1}*Q'= A^{-1} = (P'Q)^{-1}
 	//cublasDtrsm is good for solving triangular linear system
 	//The result will be sotred to mtxA_inv_d  
 	const double alpha = 1.0;
 	CHECK_CUBLAS(cublasDtrsm(cublasHandler, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, N, N, &alpha, mtxA_cpy_d, lda, mtxA_inv_d, lda));
-	
+	endTime = myCPUTimer();
+	if(benchmark){
+		printf("\nPart(b.iv): Solve RX = Q', then result is (P'Q) %f s \n", endTime - startTime);
+		printf("\n~~Exit (P'Q)^{-1}~~\n\n");
+	}
+
 	// //Check solver after QR decomposition was successful or not.
 	// CHECK(cudaMemcpy(&devInfo, devInfo, sizeof(int), cudaMemcpyDeviceToHost));
 
@@ -269,7 +294,7 @@ void inverse_Den_Mtx(cusolverDnHandle_t cusolverHandler, double* mtxA_d, double*
 
 } // end of inverse_Den_Mtx
 
-
+//Naive
 //Input: double* identity matrix, int numer of Row, Column
 //Process: Creating dense identity matrix with number of N
 //Output: double* mtxI
@@ -294,7 +319,7 @@ __global__ void identity_matrix(double* mtxI_d, int N)
 
 }// end of identity_matrix
 
-
+//Naive
 //Input: double* identity matrix, int N, which is numer of Row or Column
 //Process: Call the kernel to create identity matrix with number of N
 //Output: double* mtxI
@@ -312,6 +337,7 @@ void createIdentityMtx(double* mtxI_d, int N)
         
 	cudaDeviceSynchronize(); // Ensure the kernel execution completes before proceeding
 }
+
 
 
 

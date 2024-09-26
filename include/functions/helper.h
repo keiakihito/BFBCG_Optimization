@@ -20,6 +20,8 @@
 
 // Time tracker for each iteration
 double myCPUTimer();
+__global__ void warmUpKernel();
+void warmUpGPU();
 
 template<typename T>
 void print_vector(const T *d_val, int size);
@@ -34,6 +36,8 @@ void initializeRandom(double mtxB_h[], int numOfRow, int numOfClm);
 
 
 
+
+
 // = = = CPU = = ==
 //Convert from LargeVector<glm::mat3> to CSRMatrix
 //double checkSparsity(const LargeVector<glm::mat3>& mtxA);
@@ -44,6 +48,15 @@ void printVecCPU(const T *vec_x_ptr, size_t size){
   for(size_t i = 0; i < size; i++){
     printf("%f\n", static_cast<double>(vec_x_ptr[i]));
   }
+}
+__global__ void warmUpKernel() {
+
+}
+
+void warmUpGPU(){
+    //Launch a dummy kernel
+    warmUpKernel<<<1,1>>>();
+    cudaDeviceSynchronize();
 }
 
 //= = = = =GPU = = = = ==

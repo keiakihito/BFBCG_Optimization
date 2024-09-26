@@ -55,6 +55,8 @@ void normalize_Den_Mtx(cublasHandle_t cublasHandler, double* mtxY_d, int numOfRo
 //Output: double* mtxY_hat, the orthonormal set of matrix Z.
 void orth_SVD(double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, int &currentRank)
 {	
+	bool benchmark = true;
+	double startTime, endTime; // For bench mark
 	/*
 	Pseudocode
 	// Mayby need to make a copy of mtxZ
@@ -97,6 +99,7 @@ void orth_SVD(double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, i
 
 	//(1) Allocate memeory in device
 	//Make a copy of mtxZ for mtxZ'
+	startTime = myCPUTimer();
     CHECK(cudaMalloc((void**)&mtxZ_cpy_d, numOfRow * numOfClm * sizeof(double)));
 	CHECK(cudaMalloc((void**)&mtxS_d, numOfRow * numOfClm * sizeof(double)));
 	
@@ -120,19 +123,34 @@ void orth_SVD(double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, i
 
     CHECK_CUSOLVER(cusolverDnCreate(&cusolverHandler));
     CHECK_CUBLAS(cublasCreate(&cublasHandler));
-
+	endTime = myCPUTimer();
+	if(benchmark){
+		printf("\n\n~~ inside orth(*) ~~\n");
+        printf("\nSet up memory and handler %f s \n", endTime - startTime);
+    }
 	//(4) Perform orthonormal set prodecure
 	//(4.1) Mutiply mtxS <- mtxZ' * mtxZ
 	//mtxZ_cpy will be free after multiplication
+	startTime = myCPUTimer();
 	multiply_Den_ClmM_mtxT_mtx(cublasHandler, mtxZ_cpy_d, mtxS_d, numOfRow, numOfClm);
-
+	cudaDeviceSynchronize();
+	endTime = myCPUTimer();
+	if(benchmark){
+        printf("\nPart(a): mtxS <- mtxZ' * mtxZ %f s \n", endTime - startTime);
+    }
 	if(debug){
 		printf("\n\n~~mtxS ~~\n\n");
 		print_mtx_clm_d(mtxS_d, numOfClm, numOfClm);
 	}
 
 	//(4.2)SVD Decomposition
+	startTime = myCPUTimer();
 	SVD_Decmp(cusolverHandler, numOfClm, numOfClm, numOfClm, mtxS_d, mtxU_d, sngVals_d, mtxVT_d);
+	cudaDeviceSynchronize();
+	endTime = myCPUTimer();
+	if(benchmark){
+        printf("\nPart(b): SVD Decomp for mtxS %f s \n", endTime - startTime);
+    }
 	if(debug){
 		printf("\n\n~~mtxU ~~\n\n");
 		print_mtx_clm_d(mtxU_d, numOfClm, numOfClm);
@@ -144,14 +162,25 @@ void orth_SVD(double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, i
 
 	//(4.3) Transpose mtxV <- mtxVT'
 	//mtxVT_d will be free inside function
+	startTime = myCPUTimer();
 	mtxV_d = transpose_Den_Mtx(cublasHandler, mtxVT_d, numOfClm, numOfClm);
+	cudaDeviceSynchronize();
+	endTime = myCPUTimer();
+	if(benchmark){
+    	printf("\nPart(c): Transpose mtxV <- mtxVT' %f s \n", endTime - startTime);
+    }
 	if(debug){
 		printf("\n\n~~mtxV ~~\n\n");
 		print_mtx_clm_d(mtxV_d, numOfClm, numOfClm);
 	}	
 
 	//(4.4) Set current rank
+	startTime = myCPUTimer();
 	currentRank = setRank(sngVals_d, currentRank, THREASHOLD);
+	endTime = myCPUTimer();
+	if(benchmark){
+    	printf("\nPart(d): Calculate current rank %f s \n", endTime - startTime);
+    }
 	if(debug){
 		printf("\n\n~~ new rank = %d ~~\n\n", currentRank);
 	}
@@ -162,17 +191,27 @@ void orth_SVD(double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, i
 
 	//(4.5) Truncate matrix V
 	//mtxV_d will be free after truncate_Den_Mtx
+	startTime = myCPUTimer();
 	mtxV_trnc_d = truncate_Den_Mtx(mtxV_d, numOfClm, currentRank);
-		
+	cudaDeviceSynchronize();
+	endTime = myCPUTimer();
+	if(benchmark){
+    	printf("\nPart(e): Truncate matrix V %f s \n", endTime - startTime);
+    }
 	if(debug){
 		printf("\n\n~~mtxV_Trnc ~~\n\n");
 		print_mtx_clm_d(mtxV_trnc_d, numOfClm, currentRank);
 	}	
 
 	//(4.6) Multiply matrix Y <- matrix Z * matrix V Truncated
+	startTime = myCPUTimer();
 	CHECK(cudaMalloc((void**)&mtxY_d, numOfRow * currentRank * sizeof(double)));
 	multiply_Den_ClmM_mtx_mtx(cublasHandler, mtxZ_d, mtxV_trnc_d, mtxY_d, numOfRow, currentRank, numOfClm);
-	
+	cudaDeviceSynchronize();
+	endTime = myCPUTimer();
+	if(benchmark){
+    	printf("\nPart(f): mtxY <- mtxZ * mtxV Truncated %f s \n", endTime - startTime);
+    }
 	if(debug){
 		printf("\n\n~~mtxY ~~\n\n");
 		print_mtx_clm_d(mtxY_d, numOfRow, currentRank);
@@ -180,7 +219,14 @@ void orth_SVD(double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, i
 
 	//(4.7) Normalize matrix Y_hat <- normalize_Den_Mtx(mtxY_d)
 	// normalize_Den_Mtx(mtxY_d, numOfRow, currentRank);
+	startTime = myCPUTimer();
 	normalize_Den_Mtx(cublasHandler, mtxY_d, numOfRow, currentRank);
+	cudaDeviceSynchronize();
+	endTime = myCPUTimer();
+	if(benchmark){
+    	printf("\nPart(g): Normalize mtxY %f s \n", endTime - startTime);
+		printf("\n~~Exit orth(*)~~ \n\n");
+    }
 	if(debug){
 		printf("\n\n~~mtxY hat <- orth(*) ~~\n\n");
 		print_mtx_clm_d(mtxY_d, numOfRow, currentRank);
