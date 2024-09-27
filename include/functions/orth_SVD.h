@@ -55,7 +55,7 @@ void normalize_Den_Mtx(cublasHandle_t cublasHandler, double* mtxY_d, int numOfRo
 //Output: double* mtxY_hat, the orthonormal set of matrix Z.
 void orth_SVD(double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, int &currentRank)
 {	
-	bool benchmark = true;
+	bool benchmark = false;
 	double startTime, endTime; // For bench mark
 	/*
 	Pseudocode
@@ -101,7 +101,7 @@ void orth_SVD(double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, i
 	//Make a copy of mtxZ for mtxZ'
 	startTime = myCPUTimer();
     CHECK(cudaMalloc((void**)&mtxZ_cpy_d, numOfRow * numOfClm * sizeof(double)));
-	CHECK(cudaMalloc((void**)&mtxS_d, numOfRow * numOfClm * sizeof(double)));
+	CHECK(cudaMalloc((void**)&mtxS_d, numOfClm * numOfClm * sizeof(double)));
 	
 	//For SVD decomposition
 	CHECK(cudaMalloc((void**)&mtxU_d, numOfRow * numOfClm * sizeof(double)));
@@ -125,7 +125,7 @@ void orth_SVD(double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, i
     CHECK_CUBLAS(cublasCreate(&cublasHandler));
 	endTime = myCPUTimer();
 	if(benchmark){
-		printf("\n\n~~ inside orth(*) ~~\n");
+		printf("\n\n~~ inside orth(*) ~~");
         printf("\nSet up memory and handler %f s \n", endTime - startTime);
     }
 	//(4) Perform orthonormal set prodecure
@@ -225,7 +225,7 @@ void orth_SVD(double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, i
 	endTime = myCPUTimer();
 	if(benchmark){
     	printf("\nPart(g): Normalize mtxY %f s \n", endTime - startTime);
-		printf("\n~~Exit orth(*)~~ \n\n");
+		printf("~~Exit orth(*)~~ \n\n");
     }
 	if(debug){
 		printf("\n\n~~mtxY hat <- orth(*) ~~\n\n");

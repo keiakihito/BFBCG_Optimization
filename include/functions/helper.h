@@ -4,6 +4,7 @@
 #include <iostream>
 #include <iomanip>
 #include <cuda_runtime.h>
+#include <cusolverDn.h>
 #include <cstdlib>
 #include <sys/time.h>
 #include <cassert>
@@ -22,6 +23,7 @@
 double myCPUTimer();
 __global__ void warmUpKernel();
 void warmUpGPU();
+void warmUpQR(int n);
 
 template<typename T>
 void print_vector(const T *d_val, int size);
@@ -58,6 +60,55 @@ void warmUpGPU(){
     warmUpKernel<<<1,1>>>();
     cudaDeviceSynchronize();
 }
+
+
+
+void warmUpQR(int n){
+    // Allocate minimal necessary memory
+    double* A_d = NULL;
+    double* invA_d = NULL;
+    double* tau_d = NULL;
+    int* devInfo = NULL;
+    int workspaceSize = 0;
+    double* workspace_d = NULL;
+    const double alpha = 1.0;
+
+    // Allocate device memory
+    CHECK(cudaMalloc((void**)&A_d, n * n * sizeof(double)));
+    CHECK(cudaMalloc((void**)&invA_d, n * n * sizeof(double)));
+    CHECK(cudaMalloc((void**)&tau_d, n * sizeof(double)));
+    CHECK(cudaMalloc((void**)&devInfo, sizeof(int)));
+
+    cusolverDnHandle_t cusolverHandler = NULL;
+    cublasHandle_t cublasHandler = NULL;
+    CHECK_CUSOLVER(cusolverDnCreate(&cusolverHandler));
+    CHECK_CUBLAS(cublasCreate(&cublasHandler));
+    // Determine workspace size
+    CHECK_CUSOLVER(cusolverDnDgeqrf_bufferSize(
+        cusolverHandler,
+        n,
+        n,
+        A_d,
+        n,
+        &workspaceSize)); // Now passing int* as expected
+
+    // Allocate workspace memory
+    CHECK(cudaMalloc((void**)&workspace_d, workspaceSize * sizeof(double)));
+    CHECK_CUSOLVER(cusolverDnDgeqrf(cusolverHandler, n, n, A_d, n, tau_d, workspace_d, workspaceSize, devInfo));
+    CHECK_CUSOLVER(cusolverDnDormqr(cusolverHandler, CUBLAS_SIDE_LEFT, CUBLAS_OP_T, n, n, n, A_d, n, tau_d, invA_d, n, workspace_d, workspaceSize, devInfo));
+    CHECK_CUBLAS(cublasDtrsm(cublasHandler, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, n, n, &alpha, A_d, n, invA_d, n));
+    cudaDeviceSynchronize();
+
+    // Free allocated memory
+    cusolverDnDestroy(cusolverHandler);
+    CHECK_CUBLAS(cublasDestroy(cublasHandler));
+    cudaFree(A_d);
+    cudaFree(invA_d);
+    cudaFree(tau_d);
+    cudaFree(devInfo);
+    cudaFree(workspace_d);
+}
+
 
 //= = = = =GPU = = = = ==
 // Time tracker for each iteration

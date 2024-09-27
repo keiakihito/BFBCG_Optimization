@@ -103,7 +103,6 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
     //Set up before iterating
     //R <- B - AX
     den_mtx_subtract_multiply_Sprc_Den_mtx(cusparseHandler, csrMtxA, mtxSolX_d, numOfColX, mtxR_d);
-
     // subtract_multiply_Den_mtx_ngtMtx_Mtx(cublasHandler, mtxA_d, mtxSolX_d, mtxR_d, numOfA, numOfA, numOfColX);
     
     if(debug){
@@ -151,6 +150,7 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
         //Q <- AP
         startTime = myCPUTimer();
         multiply_Sprc_Den_mtx(cusparseHandler, csrMtxA, mtxP_d, crrntRank, mtxQ_d);
+        cudaDeviceSynchronize();
         endTime = myCPUTimer();
         
         if(benchmark && (1 <= counter && counter <= 6)){
@@ -169,8 +169,10 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
         //Part (a) (P'Q)
         startTime = myCPUTimer();
         multiply_Den_ClmM_mtxT_mtx(cublasHandler, mtxP_d, mtxQ_d, mtxPTQ_d, numOfA, crrntRank, crrntRank);
+        cudaDeviceSynchronize();
         endTime = myCPUTimer();
         if(benchmark && (1 <= counter && counter <= 6)){
+            printf("\n\n= = Start Alpha <- (P'Q)^{-1} * (P'R)= = ");
             printf("\nPart(a): (P'Q) %f s \n", endTime - startTime);
         }
         
@@ -193,14 +195,15 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
             printf("\nPart(b): (P'Q)^{-1} %f s \n", endTime - startTime);
         }
         
-        if(debug){
-            printf("\n\n~~mtxPTQ_inv~~\n\n");
-            print_mtx_clm_d(mtxPTQ_inv_d, crrntRank, crrntRank);
-        }
+        // if(debug){
+        //     printf("\n\n~~mtxPTQ_inv~~\n\n");
+        //     print_mtx_clm_d(mtxPTQ_inv_d, crrntRank, crrntRank);
+        // }
 
         //Part (C) (P'R)
         startTime = myCPUTimer();
         multiply_Den_ClmM_mtxT_mtx(cublasHandler, mtxP_d, mtxR_d, mtxPTR_d, numOfA, crrntRank, numOfColX);
+        cudaDeviceSynchronize();
         endTime = myCPUTimer();
         if(benchmark && (1 <= counter && counter <= 6)){
             printf("\nPart(C): (P'R) %f s \n", endTime - startTime);
@@ -223,6 +226,7 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
             }
             startTime = myCPUTimer();
             CHECK_CUBLAS(cublasDscal(cublasHandler, numOfColX, alpha_h, mtxAlph_d, crrntRank));
+            cudaDeviceSynchronize();
             endTime = myCPUTimer();
             if(benchmark && (1 <= counter && counter <= 6)){
                 printf("\nPart(d): Alpha <- (P'Q)^{-1} * (P'R): %f s \n", endTime - startTime);
@@ -235,9 +239,11 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
         }else{
             startTime = myCPUTimer();
             multiply_Den_ClmM_mtx_mtx(cublasHandler, mtxPTQ_inv_d, mtxPTR_d, mtxAlph_d, crrntRank, numOfColX, crrntRank);
+            cudaDeviceSynchronize();
             endTime = myCPUTimer();
             if(benchmark && (1 <= counter && counter <= 6)){
                 printf("\nPart(d): Alpha <- (P'Q)^{-1} * (P'R): %f s \n", endTime - startTime);
+                printf("= = Exit Alpha <- (P'Q)^{-1} * (P'R)= = \n\n");
             }
             if(debug){
                 printf("\n\n~~mtxAlpha~~\n\n");
@@ -249,6 +255,7 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
         //X_{i+1} <- x_{i} + P * alpha
         startTime = myCPUTimer();
         multiply_sum_Den_ClmM_mtx_mtx(cublasHandler, mtxP_d, mtxAlph_d, mtxSolX_d, numOfA, numOfColX, crrntRank);
+        cudaDeviceSynchronize();
         endTime = myCPUTimer();
         if(benchmark && (1 <= counter && counter <= 6)){
             printf("\nX_{i+1} <- x_{i} + P * alpha: %f s \n", endTime - startTime);
@@ -262,6 +269,7 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
         //R_{i+1} <- R_{i} - Q * alpha
         startTime = myCPUTimer();
         subtract_multiply_Den_mtx_ngtMtx_Mtx(cublasHandler, mtxQ_d, mtxAlph_d, mtxR_d, numOfA, crrntRank, numOfColX);
+        cudaDeviceSynchronize();
         endTime = myCPUTimer();
         if(benchmark && (1 <= counter && counter <= 6)){
             printf("\nR_{i+1} <- R_{i} - Q * alpha: %f s \n", endTime - startTime);
@@ -292,6 +300,7 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
         // Z_{i+1} <- MR_{i+1}
         startTime = myCPUTimer();
         multiply_Sprc_Den_mtx(cusparseHandler, csrMtxM, mtxR_d, numOfColX, mtxZ_d);
+        cudaDeviceSynchronize();
         endTime = myCPUTimer();
         if(benchmark && (1 <= counter && counter <= 6)){
             printf("\nZ_{i+1} <- MR_{i+1}: %f s \n", endTime - startTime);
@@ -308,6 +317,7 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
         //(Q'Z_{i+1})
         startTime = myCPUTimer();
         multiply_Den_ClmM_mtxT_mtx(cublasHandler, mtxQ_d, mtxZ_d, mtxQTZ_d, numOfA, crrntRank, numOfColX);
+        // cudaDeviceSynchronize();
         if(debug){
             printf("\n\n~~mtxQTZ~~\n\n");
             print_mtx_clm_d(mtxQTZ_d, crrntRank, numOfColX);
@@ -322,6 +332,7 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
             *beta_h *= -1.0f;
 
             CHECK_CUBLAS(cublasDscal(cublasHandler, numOfColX, beta_h, mtxBta_d, crrntRank));
+            cudaDeviceSynchronize();
             endTime = myCPUTimer();
             if(benchmark && (1 <= counter && counter <= 6)){
                 printf("\nbeta <- -(P'Q)^{-1} * (Q'Z_{i+1}): %f s \n", endTime - startTime);
@@ -334,6 +345,7 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
 
         }else{
             multiply_ngt_Den_ClmM_mtx_mtx(cublasHandler, mtxPTQ_inv_d, mtxQTZ_d, mtxBta_d, crrntRank, numOfColX, crrntRank);
+            cudaDeviceSynchronize();
             endTime = myCPUTimer();
             if(benchmark && (1 <= counter && counter <= 6)){
                 printf("\nbeta <- -(P'Q)^{-1} * (Q'Z_{i+1}): %f s \n", endTime - startTime);
@@ -351,7 +363,7 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
         //Then P_{i+1} <- orth(Z_{ i+1})
         startTime = myCPUTimer();
         multiply_sum_Den_ClmM_mtx_mtx(cublasHandler, mtxP_d, mtxBta_d, mtxZ_d, numOfA, numOfColX, crrntRank);
-        
+        cudaDeviceSynchronize();
         endTime = myCPUTimer();
         if(benchmark && (1 <= counter && counter <= 6)){
             printf("\n(*) <- Z_{i+1} + p * beta: %f s \n", endTime - startTime);
@@ -363,7 +375,7 @@ void bfbcg(CSRMatrix *csrMtxA, double* mtxSolX_d, double* mtxB_d, int numOfA, in
 
 
         //To update matrix P
-        startTime = myCPUTimer();
+        // startTime = myCPUTimer();
         orth_SVD(&mtxP_d, mtxZ_d, numOfA, numOfColX, crrntRank);
 //        orth_QR(&mtxP_d, mtxZ_d, numOfA, crrntRank, crrntRank);
         endTime = myCPUTimer();

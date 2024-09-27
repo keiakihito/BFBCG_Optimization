@@ -88,7 +88,7 @@ void inverse_QR_Den_Mtx(cusolverDnHandle_t cusolverHandler, cublasHandle_t cubla
     }
 	
 	//Let matrix (P'Q) = A = (QR) with decompostion 
-	// To find (P'Q)^{-1}, we will do A^{-1} = R^{-1}Q^{-1}= R^{-1}Q^{-1} = R^{-1}Q'
+	// To find (P'Q)^{-1}, we will do A^{-1} = R^{-1}Q^{-1} = R^{-1}Q'
 	// The goal is obtaining R^{-1}Q', we will do RX = Q' in Part(6.iii)
 
 	//(3) Create Identity matrix
@@ -97,7 +97,7 @@ void inverse_QR_Den_Mtx(cusolverDnHandle_t cusolverHandler, cublasHandle_t cubla
 	createIdentityMtx(mtxA_inv_d, N);
 	endTime = myCPUTimer();
 	if(benchmark){
-		printf("\n\n~~ inside (P'Q)^{-1} ~~\n");
+		printf("\n~~ inside (P'Q)^{-1} ~~");
 		printf("\nPart(b.i): Create Identity Matrix %f s \n", endTime - startTime);
 	}
 	if(debug){
@@ -112,6 +112,7 @@ void inverse_QR_Den_Mtx(cusolverDnHandle_t cusolverHandler, cublasHandle_t cubla
 	//(5)Perform QR decomposition, the matrix Q is stored to mtxA_cpy_d implicitly
 	startTime = myCPUTimer();
 	CHECK_CUSOLVER(cusolverDnDgeqrf(cusolverHandler, N, N, mtxA_cpy_d, lda, tau_d, work_d, lwork, devInfo));
+	cudaDeviceSynchronize();
 	endTime = myCPUTimer();
 	if(benchmark){
 		printf("\nPart(b.ii): Perform QR decompostion %f s \n", endTime - startTime);
@@ -139,10 +140,11 @@ void inverse_QR_Den_Mtx(cusolverDnHandle_t cusolverHandler, cublasHandle_t cubla
 	//The result will be sotred to mtxA_inv_d  
 	const double alpha = 1.0;
 	CHECK_CUBLAS(cublasDtrsm(cublasHandler, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, N, N, &alpha, mtxA_cpy_d, lda, mtxA_inv_d, lda));
+	cudaDeviceSynchronize();
 	endTime = myCPUTimer();
 	if(benchmark){
 		printf("\nPart(b.iv): Solve RX = Q', then result is (P'Q) %f s \n", endTime - startTime);
-		printf("\n~~Exit (P'Q)^{-1}~~\n\n");
+		printf("~~Exit (P'Q)^{-1}~~\n");
 	}
 
 	// //Check solver after QR decomposition was successful or not.
