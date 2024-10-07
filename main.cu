@@ -18,6 +18,7 @@
 
 #include "include/functions/helper.h"
 #include "include/functions/bfbcg.h"
+#include "include/functions/pcg.h"
 #include "include/struct/CSRMatrix.hpp"
 
 
@@ -34,6 +35,7 @@ int main(){
     const int NUM_OF_CLM_VEC = 5;
     int size;
     bool optimize = false;
+    bool naive = false;
 
     //Warm up the GPU explicitly.
     warmUpGPU();
@@ -54,19 +56,24 @@ int main(){
     //(1) Allocate memory on the GPU
     double* mtxX_d = nullptr;
     double* mtxB_d = nullptr;
+    double* vecB_d = nullptr;
     CHECK(cudaMalloc((void**)&mtxX_d, NUM_OF_A * NUM_OF_CLM_VEC * sizeof(double)));
     CHECK(cudaMalloc((void**)&mtxB_d, NUM_OF_A * NUM_OF_CLM_VEC * sizeof(double)));
-
+    CHECK(cudaMalloc((void**)&vecB_d, NUM_OF_A * sizeof(double)));
+    
      //(2) Copy Data from CPU to GPU
     CHECK(cudaMemcpy(mtxX_d, mtxX_h, NUM_OF_A * NUM_OF_CLM_VEC * sizeof(double), cudaMemcpyHostToDevice));
     CHECK(cudaMemcpy(mtxB_d, mtxB_h, NUM_OF_A * NUM_OF_CLM_VEC * sizeof(double), cudaMemcpyHostToDevice));
-
+    CHECK(cudaMemcpy(vecB_d, vecB_h, NUM_OF_A * sizeof(double), cudaMemcpyHostToDevice));
     if(optimize){
         std::cout << "\n~~Optimized bfbcg test~~\n\n";
-    }else{
+    }else if(naive){
         //(3) Call bfbcg to utilize CUDA functions
         std::cout << "\n~~Naive bfbcg test~~";
         bfbcg(csrMtxA, mtxX_d, mtxB_d, NUM_OF_A, NUM_OF_CLM_VEC);
+    }else{
+        std::cout << "\n~~pcg test~~";
+        pcg(csrMtxA, mtxX_d, vecB_d, NUM_OF_A);
     }
     
 
@@ -74,6 +81,7 @@ int main(){
     //(4) Free GPU and CPU memory
     CHECK(cudaFree(mtxX_d));
     CHECK(cudaFree(mtxB_d));
+    CHECK(cudaFree(vecB_d));
     delete[] mtxX_h;
     delete[] mtxB_h;
     delete[] vecX_h;
