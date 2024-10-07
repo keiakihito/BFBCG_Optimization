@@ -57,7 +57,7 @@ void inverse_QR_Den_Mtx(cusolverDnHandle_t cusolverHandler, cublasHandle_t cubla
 {	
 
 	bool debug = false;
-	bool benchmark = true;
+	bool benchmark = false;
 
 	double startTime, endTime; // For bench mark
 	double *mtxA_cpy_d = NULL;

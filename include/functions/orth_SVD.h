@@ -21,7 +21,7 @@
 //Input: double* mtxY_hat_d, double* mtxZ, int number of Row, int number Of column, int & currentRank
 //Process: the function extracts orthonormal set from the matrix Z
 //Output: double* mtxY_hat, the orthonormal set of matrix Z.
-void orth_SVD(double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, int &currentRank);
+void orth_SVD(cublasHandle_t cublasHandler, cusolverDnHandle_t cusolverHandler, double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, int &currentRank);
 
 
 //For orth sub functions
@@ -53,7 +53,7 @@ void normalize_Den_Mtx(cublasHandle_t cublasHandler, double* mtxY_d, int numOfRo
 //Input: double* mtxZ, int number of Row, int number Of column, int & currentRank
 //Process: the function extracts orthonormal set from the matrix Z
 //Output: double* mtxY_hat, the orthonormal set of matrix Z.
-void orth_SVD(double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, int &currentRank)
+void orth_SVD(cublasHandle_t cublasHandler, cusolverDnHandle_t cusolverHandler, double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, int &currentRank)
 {	
 	bool benchmark = false;
 	double startTime, endTime; // For bench mark
@@ -117,12 +117,12 @@ void orth_SVD(double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, i
 		print_mtx_clm_d(mtxZ_cpy_d, numOfRow, numOfClm);
 	}
 
-	//(3) Create handler
-    cusolverDnHandle_t cusolverHandler = NULL;
-    cublasHandle_t cublasHandler = NULL;
+	// //(3) Create handler
+    // cusolverDnHandle_t cusolverHandler = NULL;
+    // cublasHandle_t cublasHandler = NULL;
 
-    CHECK_CUSOLVER(cusolverDnCreate(&cusolverHandler));
-    CHECK_CUBLAS(cublasCreate(&cublasHandler));
+    // CHECK_CUSOLVER(cusolverDnCreate(&cusolverHandler));
+    // CHECK_CUBLAS(cublasCreate(&cublasHandler));
 	endTime = myCPUTimer();
 	if(benchmark){
 		printf("\n\n~~ inside orth(*) ~~");
@@ -261,8 +261,8 @@ void orth_SVD(double** mtxY_hat_d, double* mtxZ_d, int numOfRow, int numOfClm, i
 
 
 	//(6) Free memory
-    CHECK_CUSOLVER(cusolverDnDestroy(cusolverHandler));
-    CHECK_CUBLAS(cublasDestroy(cublasHandler));
+    // CHECK_CUSOLVER(cusolverDnDestroy(cusolverHandler));
+    // CHECK_CUBLAS(cublasDestroy(cublasHandler));
 
 	CHECK(cudaFree(mtxS_d));
     CHECK(cudaFree(mtxU_d));
